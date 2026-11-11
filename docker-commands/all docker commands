@@ -1,0 +1,451 @@
+# Docker Commands: Beginner Guide and Reference
+
+This guide starts with the basics, then works up to images, storage, networking,
+Dockerfiles, and Compose. Try the short walkthrough before using the later
+sections as a command reference.
+
+Replace placeholders such as `<image>`, `<container>`, and `<host-path>` with
+real names or IDs. For example, replace `<container>` with `web`. Commands that
+manage Docker may require `sudo` unless your user has permission to access it.
+Never put real passwords in shell history, source files, or shared examples.
+
+## The Basics in Plain Language
+
+- **Image**: the packaged template Docker uses to create containers. Example:
+  `nginx` is an image.
+- **Container**: a running (or stopped) copy created from an image. You can run
+  multiple containers from the same image.
+- **Registry**: a place to download and share images. Docker Hub is the default
+  registry when you write an image name such as `nginx`.
+- **Port mapping**: connects a port on your computer to a port inside a
+  container, so you can reach an app in that container.
+- **Volume**: storage that lives outside a container, so important data can
+  remain when the container is replaced.
+
+Think of the relationship like this: **image = template; container = created
+instance**. Removing a container does not automatically remove its image.
+
+## 1. Install and Start Docker (Ubuntu)
+
+```bash
+sudo apt update
+sudo apt install docker.io
+sudo systemctl enable --now docker
+sudo systemctl status docker
+```
+
+- `sudo apt update` refreshes the package index; it does not install upgrades.
+- `sudo apt install docker.io` installs Ubuntu's Docker Engine package.
+- `sudo systemctl enable --now docker` enables Docker to start at boot and
+  starts it immediately. On systems without systemd, use the service manager
+  provided by that system, for example `sudo service docker start`.
+- `sudo systemctl status docker` checks whether the daemon is running.
+- Verify the client and daemon with `docker version` and `docker info`.
+- Adding a user to the `docker` group can grant root-equivalent access. Only do
+  so for trusted users; logging out and back in is needed for group changes to
+  take effect.
+
+## Start Here: Your First Container
+
+First, check that Docker is available:
+
+```bash
+docker version
+```
+
+If the command reports a permission error on Linux, try `sudo docker version`.
+If it cannot connect to the daemon, check `sudo systemctl status docker`.
+
+Run a tiny test image:
+
+```bash
+docker run --rm hello-world
+```
+
+Docker downloads `hello-world` if needed, runs it, prints a success message,
+then removes that test container because of `--rm`.
+
+Next, run a small web server:
+
+```bash
+docker run -d --name web -p 8080:80 nginx
+docker ps
+```
+
+Read the first command from left to right:
+
+- `docker run` creates a container and starts it.
+- `-d` leaves it running in the background, so the terminal is available again.
+- `--name web` gives the container an easy name to use in later commands.
+- `-p 8080:80` maps host port `8080` to container port `80`.
+- `nginx` is the image Docker uses. Docker downloads it if it is not already
+  on your machine.
+
+Open `http://localhost:8080` on the same computer to see the Nginx page. On a
+cloud machine, use its public address and make sure its firewall allows port
+8080. If the command says the name `web` is already taken, remove or rename the
+old container before trying again.
+
+When finished, clean up the test container:
+
+```bash
+docker stop web
+docker rm web
+```
+
+`stop` stops the running process; `rm` removes the stopped container. You can
+run `docker ps -a` to see stopped containers too. The `nginx` image remains
+available for another run.
+
+## 2. Docker Hub and Images
+
+```bash
+docker pull <image>:<tag>
+docker images
+docker image ls
+docker image inspect <image>
+docker history <image>
+docker tag <source-image> <target-image>:<tag>
+docker rmi <image>
+docker image prune
+```
+
+- `docker pull nginx:latest` downloads an image from a registry (Docker Hub by
+  default). Prefer an explicit version tag for reproducible deployments.
+- `docker images` and `docker image ls` list local images.
+- `docker image inspect <image>` prints image configuration and metadata.
+- `docker history <image>` shows the image's build layers and their commands.
+- `docker tag` adds another name/tag for a local image; it does not duplicate
+  the image data.
+- `docker rmi <image>` removes an image by name, tag, or ID. It may fail if a
+  container still references the image.
+- `docker image prune` removes dangling images. `docker image prune -a` removes
+  all images not used by a container; inspect the impact before confirming.
+  Avoid blindly deleting every image because other projects may need them.
+
+## 3. Create and Run Containers
+
+```bash
+docker run <image>
+docker run --name <container> <image>
+docker run -d --name <container> <image>
+docker run --rm <image>
+docker run -it <image> sh
+```
+
+- `docker run` creates a container from an image and starts it. If the image is
+  not local, Docker tries to pull it first.
+- Without `-d`, the container runs attached to the terminal. `-d` (or
+  `--detach`) runs it in the background and prints its container ID.
+- `--name <container>` assigns a readable container name. The final argument
+  must be an image, not a container ID.
+- `--rm` removes the container automatically when it exits. Do not use it when
+  you need to keep the stopped container around for inspection.
+- `-it` allocates an interactive terminal. Use a shell available in the image,
+  often `sh` or `/bin/bash`.
+
+Example web server:
+
+```bash
+docker run -d --name web nginx
+```
+
+## 4. List and Inspect Containers
+
+```bash
+docker ps
+docker ps -a
+docker container ls
+docker container ls -a
+docker inspect <container>
+docker logs <container>
+docker logs -f --tail 100 <container>
+docker stats
+```
+
+- `docker ps` lists running containers only. Add `-a` or `--all` to include
+  stopped containers. `docker container ls` is the equivalent modern form.
+- `docker inspect <container>` prints detailed JSON configuration, state,
+  mounts, network settings, and other metadata.
+- `docker logs <container>` prints a container's standard output and error.
+  `-f` follows new output; `--tail 100` limits the initial output.
+- `docker stats` displays live resource usage for running containers. Use
+  `docker stats <container>` to focus on one.
+
+## 5. Stop, Start, and Remove Containers
+
+```bash
+docker stop <container>
+docker start <container>
+docker restart <container>
+docker rm <container>
+docker rm -f <container>
+docker container prune
+docker container prune -f
+```
+
+- `docker stop` asks a running container to stop gracefully, then kills it if
+  it does not stop within the timeout. The container remains and can be started
+  again.
+- `docker start` starts an existing stopped container; `docker restart` stops
+  and starts it.
+- `docker rm` removes a stopped container. It does not remove its image or
+  separately managed volumes.
+- `docker rm -f` forcibly stops and removes a container. Use it only when you
+  understand what work or data it may contain.
+- `docker container prune` removes all stopped containers after confirmation.
+  `-f` skips the confirmation prompt. This is a bulk destructive operation;
+  inspect `docker ps -a` first.
+- Removing a container does not necessarily remove data stored in a named
+  volume. Use `docker volume ls` before removing volumes.
+
+## 6. Work Inside a Running Container
+
+```bash
+docker exec -it <container> /bin/bash
+docker exec -it <container> sh
+docker exec <container> <command>
+docker cp <container>:<path> <host-path>
+docker cp <host-path> <container>:<path>
+```
+
+- `docker exec` starts a new process in a running container. Use `-it` for an
+  interactive shell. Minimal images may have `sh` but no Bash.
+- `docker cp` copies files between the host and a container. It works with
+  stopped containers as well as running ones.
+- Changes made manually inside a container are not a reproducible build process
+  and may be lost when the container is replaced. Prefer a Dockerfile and
+  mounted or named volumes for persistent data.
+
+## 7. Publish Container Ports
+
+```bash
+docker run -d --name <container> -p <host-port>:<container-port> <image>
+```
+
+Example:
+
+```bash
+docker run -d --name web -p 8080:80 nginx
+```
+
+- `-p host-port:container-port` publishes a port from the container on the
+  host. In the example, requests to host port `8080` are forwarded to port `80`
+  in the container.
+- `-p 80:80` publishes on host port 80. The host port must be available; on a
+  cloud VM, its firewall/security rules must also allow inbound traffic.
+- Publishing without a host IP can expose the port on all host interfaces. To
+  restrict it to the local machine, use `-p 127.0.0.1:8080:80`.
+- `EXPOSE` in a Dockerfile is documentation/metadata; it does not publish a
+  port. Port publishing is configured when creating the container.
+
+## 8. Persist Data with Volumes and Mounts
+
+```bash
+docker volume create <volume>
+docker volume ls
+docker volume inspect <volume>
+docker volume rm <volume>
+docker run -d --name <container> -v <volume>:/container/path <image>
+docker run -d --name <container> --mount type=bind,source=<host-path>,target=/container/path <image>
+```
+
+- A named volume is managed by Docker and is a good default for container data.
+  `-v <volume>:/container/path` mounts it at the path inside the container.
+- A bind mount maps a specific host directory or file into the container. The
+  host path must be appropriate and accessible to Docker.
+- `--mount` uses explicit `type`, `source`, and `target` fields; `-v` is a
+  shorter equivalent for common cases.
+- `docker volume rm` removes a named volume and its stored data. Check which
+  containers use it first; do not remove a volume if its data is needed.
+
+Example named-volume mount:
+
+```bash
+docker volume create dbdata
+docker run -d --name database -v dbdata:/var/lib/mysql mysql:8
+```
+
+## 9. Environment Variables and Databases
+
+```bash
+docker run -d --name <container> -e KEY=value <image>
+docker run -d --name <container> --env-file .env <image>
+```
+
+Example for local practice only:
+
+```bash
+docker run -d --name mysql \
+  -e MYSQL_ROOT_PASSWORD='change-this-local-password' \
+  -e MYSQL_DATABASE='example_db' \
+  -v dbdata:/var/lib/mysql \
+  mysql:8
+```
+
+- `-e KEY=value` sets an environment variable in the container. MySQL images
+  commonly use variables such as `MYSQL_ROOT_PASSWORD` and `MYSQL_DATABASE`.
+- Do not use a real password in a checked-in command or commit a secrets file.
+  Environment variables can also be visible to users who can inspect the
+  container; use a secrets manager for production credentials.
+- Use a named volume for database data so it survives container replacement.
+- The image name is conventionally lowercase, for example `mysql:8`.
+
+## 10. Connect Containers with Networks
+
+```bash
+docker network ls
+docker network create <network>
+docker network inspect <network>
+docker network connect <network> <container>
+docker network disconnect <network> <container>
+docker network rm <network>
+docker run -d --name <container> --network <network> <image>
+```
+
+- User-defined bridge networks let containers resolve one another by container
+  name and communicate without legacy links.
+- Start both containers on the same user-defined network. For example, a web
+  application can use the database container name as its database host.
+- `docker network connect` and `disconnect` attach or detach an existing
+  container. A network cannot be removed while containers are connected to it.
+- `--link` is a legacy feature; prefer user-defined networks and container DNS.
+
+## 11. Build and Share Images
+
+```bash
+docker build -t <name>:<tag> .
+docker build -t <name>:<tag> -f <Dockerfile-path> <build-context>
+docker save -o <image-file.tar> <image>
+docker load -i <image-file.tar>
+docker export -o <container-filesystem.tar> <container>
+docker import <container-filesystem.tar> <name>:<tag>
+docker commit <container> <name>:<tag>
+```
+
+- `docker build` builds an image from a Dockerfile and a build context. The
+  final path argument is the context directory; `.` means the current directory.
+- `-t` gives the image a name and tag. Use `-f` when the Dockerfile is not
+  named `Dockerfile` or is in another location.
+- `docker save` archives one or more images, including image metadata and
+  layers. `docker load` restores images from that archive.
+- `docker export` archives a container's filesystem, but not its image history
+  or configuration. `docker import` creates a new image from an exported
+  filesystem.
+- `docker commit` creates an image from a container's current filesystem. It
+  can be useful for experiments, but a Dockerfile is preferred because it is
+  reviewable and reproducible.
+
+## 12. Dockerfile Instructions
+
+A Dockerfile describes how to build an image. Common instructions include:
+
+- `FROM`: selects the base image; starts each build stage. It can appear more
+  than once for multi-stage builds.
+- `RUN`: executes a command while building the image, commonly to install
+  packages. Combine related cleanup with installation to keep images smaller.
+- `WORKDIR`: sets the working directory for later instructions and the default
+  command.
+- `COPY`: copies files from the build context into the image.
+- `ADD`: copies files like `COPY` and can extract local tar archives. Prefer
+  `COPY` unless `ADD`'s special behavior is needed.
+- `ENV`: sets environment variables that remain in the image and are available
+  to containers. Do not store secrets here.
+- `ARG`: defines a build-time variable, optionally supplied with
+  `docker build --build-arg NAME=value`. It is not a secure place for secrets.
+- `EXPOSE`: documents the port the application listens on; does not publish it.
+- `VOLUME`: declares a mount point intended for persistent or externally
+  managed data.
+- `USER`: selects the user for subsequent build steps and the default runtime.
+  Prefer a non-root user when the application permits it.
+- `CMD`: supplies the default command or arguments when a container starts.
+  A Dockerfile should have one effective `CMD`; a later one replaces an earlier
+  one.
+- `ENTRYPOINT`: configures the executable to run when a container starts.
+  `CMD` can provide its default arguments. A later `ENTRYPOINT` replaces an
+  earlier one.
+- `LABEL`: adds image metadata, such as a maintainer or version.
+- `HEALTHCHECK`: defines a command Docker uses to assess container health.
+- `SHELL`: selects the shell used by shell-form `RUN` instructions.
+- `STOPSIGNAL`: sets the signal sent to the container's main process when it is
+  stopped.
+- `ONBUILD`: stores a trigger to run when the image is later used as a base.
+- `MAINTAINER`: obsolete; use a `LABEL` for maintainer metadata instead.
+
+Minimal example:
+
+```dockerfile
+FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+EXPOSE 3000
+USER node
+CMD ["node", "src/app.js"]
+```
+
+Build it from the directory containing the Dockerfile:
+
+```bash
+docker build -t sample-app:1.0 .
+```
+
+## 13. Docker Compose
+
+The current Compose plugin uses `docker compose` (with a space):
+
+```bash
+docker compose up -d
+docker compose -f <file> up -d
+docker compose ps
+docker compose logs -f
+docker compose exec <service> sh
+docker compose down
+```
+
+- `docker compose up -d` builds or pulls required images, creates services,
+  networks, and volumes as configured, and starts the containers in the
+  background.
+- `-f <file>` selects a Compose file other than the default `compose.yaml` or
+  `docker-compose.yml`.
+- `docker compose ps`, `logs`, and `exec` inspect and work with Compose
+  services.
+- `docker compose down` stops and removes the project's containers and
+  networks. Named volumes are kept by default; `docker compose down -v` also
+  removes volumes and their data, so use it cautiously.
+- The older `docker-compose` command may exist as a separate legacy tool. Prefer
+  `docker compose` when using the current Compose plugin.
+
+## 14. System Usage and Cleanup
+
+```bash
+docker system df
+docker system df -v
+docker system prune
+docker system prune -a
+```
+
+- `docker system df` reports disk space used by images, containers, and
+  volumes. `-v` gives more detail.
+- `docker system prune` removes unused containers, networks, dangling images,
+  and build cache after confirmation.
+- `docker system prune -a` also removes unused images that are not dangling.
+  Neither command should be run without reviewing what data and cached images
+  you need; add `--volumes` only if you intend to delete unused volumes too.
+
+## 15. Quick Reference and Safety
+
+- List running containers: `docker ps`
+- List all containers: `docker ps -a`
+- Follow logs: `docker logs -f <container>`
+- Open a shell: `docker exec -it <container> sh`
+- Stop a container: `docker stop <container>`
+- Show images: `docker image ls`
+- Inspect an object: `docker inspect <container-or-image>`
+- Check storage: `docker system df`
+- Get command help: `docker <command> --help`
+
+Before bulk deletion, inspect the target list and use prune preview options where
+available. Never paste production passwords into examples, and remember that a
+container's writable layer is not a substitute for persistent storage.
